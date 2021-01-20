@@ -24,17 +24,18 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import gr.ekt.bte.core.Record;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpException;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.StatusLine;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.params.CoreConnectionPNames;
-import org.apache.log4j.Logger;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.logging.log4j.Logger;
 import org.dspace.app.util.XMLUtils;
 import org.dspace.core.Context;
 import org.dspace.core.LogManager;
@@ -51,7 +52,7 @@ import org.xml.sax.SAXException;
  */
 public class CrossRefService {
 
-    private static final Logger log = Logger.getLogger(CrossRefService.class);
+    private static final Logger log = org.apache.logging.log4j.LogManager.getLogger(CrossRefService.class);
 
     protected int timeout = 1000;
 
@@ -62,14 +63,13 @@ public class CrossRefService {
     public List<Record> search(Context context, Set<String> dois, String apiKey)
         throws HttpException, IOException, JDOMException,
         ParserConfigurationException, SAXException {
-        List<Record> results = new ArrayList<Record>();
+        List<Record> results = new ArrayList<>();
         if (dois != null && dois.size() > 0) {
             for (String record : dois) {
                 try {
                     HttpGet method = null;
                     try {
-                        HttpClient client = new DefaultHttpClient();
-                        client.getParams().setIntParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, timeout);
+                        HttpClient client = HttpClientBuilder.create().build();
 
                         try {
                             URIBuilder uriBuilder = new URIBuilder(
@@ -77,7 +77,12 @@ public class CrossRefService {
                             uriBuilder.addParameter("pid", apiKey);
                             uriBuilder.addParameter("noredirect", "true");
                             uriBuilder.addParameter("id", record);
+
                             method = new HttpGet(uriBuilder.build());
+                            RequestConfig requestConfig = RequestConfig.custom()
+                                    .setConnectTimeout(timeout)
+                                    .build();
+                            method.setConfig(requestConfig);
                         } catch (URISyntaxException ex) {
                             throw new HttpException("Request not sent", ex);
                         }
@@ -99,6 +104,9 @@ public class CrossRefService {
                             factory.setValidating(false);
                             factory.setIgnoringComments(true);
                             factory.setIgnoringElementContentWhitespace(true);
+                            // disallow DTD parsing to ensure no XXE attacks can occur.
+                            // See https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+                            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 
                             DocumentBuilder db = factory
                                 .newDocumentBuilder();
@@ -137,9 +145,7 @@ public class CrossRefService {
     public List<Record> search(Context context, String title, String authors,
                                int year, int count, String apiKey) throws IOException, HttpException {
         HttpGet method = null;
-        try {
-            HttpClient client = new DefaultHttpClient();
-            client.getParams().setIntParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, timeout);
+        try ( CloseableHttpClient client = HttpClientBuilder.create().build(); ) {
 
             URIBuilder uriBuilder = new URIBuilder("http://search.labs.crossref.org/dois");
 
@@ -156,7 +162,12 @@ public class CrossRefService {
 
             uriBuilder.addParameter("year", year != -1 ? String.valueOf(year) : "");
             uriBuilder.addParameter("rows", count != -1 ? String.valueOf(count) : "");
+
             method = new HttpGet(uriBuilder.build());
+            RequestConfig requestConfig = RequestConfig.custom()
+                    .setConnectTimeout(timeout)
+                    .build();
+            method.setConfig(requestConfig);
 
             // Execute the method.
             HttpResponse response = client.execute(method);
@@ -174,7 +185,7 @@ public class CrossRefService {
             List<Map> json = gson.fromJson(
                 IOUtils.toString(response.getEntity().getContent(), StandardCharsets.UTF_8),
                 listType);
-            Set<String> dois = new HashSet<String>();
+            Set<String> dois = new HashSet<>();
             for (Map r : json) {
                 dois.add(SubmissionLookupUtils.normalizeDOI((String) r
                     .get("doi")));

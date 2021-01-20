@@ -21,8 +21,8 @@ import java.util.UUID;
 import javax.mail.MessagingException;
 
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.AuthorizeService;
@@ -31,7 +31,7 @@ import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.DCDate;
 import org.dspace.content.Item;
-import org.dspace.content.MetadataSchema;
+import org.dspace.content.MetadataSchemaEnum;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.InstallItemService;
@@ -104,7 +104,7 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
     /**
      * log4j logger
      */
-    private final Logger log = Logger.getLogger(BasicWorkflowServiceImpl.class);
+    private final Logger log = org.apache.logging.log4j.LogManager.getLogger(BasicWorkflowServiceImpl.class);
 
     @Override
     public int getWorkflowID(String state) {
@@ -356,7 +356,7 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
                 // advance(...) will call itself if no workflow step group exists
                 // so we need to check permissions only if a workflow step group is
                 // in place.
-                if (workflowItem.getCollection().getWorkflowStep1() != null && e != null) {
+                if (workflowItem.getCollection().getWorkflowStep1(context) != null && e != null) {
                     authorizeService
                         .authorizeAction(context, e, workflowItem.getCollection(), Constants.WORKFLOW_STEP_1, true);
                 }
@@ -372,7 +372,7 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
                 // advance(...) will call itself if no workflow step group exists
                 // so we need to check permissions only if a workflow step group is
                 // in place.
-                if (workflowItem.getCollection().getWorkflowStep2() != null && e != null) {
+                if (workflowItem.getCollection().getWorkflowStep2(context) != null && e != null) {
                     authorizeService
                         .authorizeAction(context, e, workflowItem.getCollection(), Constants.WORKFLOW_STEP_2, true);
                 }
@@ -388,7 +388,7 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
                 // advance(...) will call itself if no workflow step group exists
                 // so we need to check permissions only if a workflow step group is
                 // in place.
-                if (workflowItem.getCollection().getWorkflowStep3() != null && e != null) {
+                if (workflowItem.getCollection().getWorkflowStep3(context) != null && e != null) {
                     authorizeService
                         .authorizeAction(context, e, workflowItem.getCollection(), Constants.WORKFLOW_STEP_3, true);
                 }
@@ -575,8 +575,8 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
 
         // if there is a workflow state group and it contains any members,
         // then we have to check permissions first
-        if ((collectionService.getWorkflowGroup(collection, step) != null)
-            && !(groupService.isEmpty(collectionService.getWorkflowGroup(collection, step)))
+        if ((collectionService.getWorkflowGroup(context, collection, step) != null)
+            && !(groupService.isEmpty(collectionService.getWorkflowGroup(context, collection, step)))
             && newowner != null) {
             authorizeService.authorizeAction(context, newowner, collection, correspondingAction, true);
         }
@@ -655,7 +655,7 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
         // any approvers?
         // if so, add them to tasklist
         // if not, skip to next state
-        Group workflowStepGroup = collectionService.getWorkflowGroup(collection, step);
+        Group workflowStepGroup = collectionService.getWorkflowGroup(context, collection, step);
 
         if ((workflowStepGroup != null) && !(groupService.isEmpty(workflowStepGroup))) {
             // set new item state
@@ -798,33 +798,37 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
         try {
             // Get submitter
             EPerson ep = item.getSubmitter();
-            // Get the Locale
-            Locale supportedLocale = I18nUtil.getEPersonLocale(ep);
-            Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "submit_archive"));
 
-            // Get the item handle to email to user
-            String handle = handleService.findHandle(context, item);
+            // send the notification to the submitter unless the submitter eperson has been deleted
+            if (ep != null) {
+                // Get the Locale
+                Locale supportedLocale = I18nUtil.getEPersonLocale(ep);
+                Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "submit_archive"));
 
-            // Get title
-            String title = item.getName();
-            if (StringUtils.isBlank(title)) {
-                try {
-                    title = I18nUtil.getMessage("org.dspace.workflow.WorkflowManager.untitled");
-                } catch (MissingResourceException e) {
-                    title = "Untitled";
+                // Get the item handle to email to user
+                String handle = handleService.findHandle(context, item);
+
+                // Get title
+                String title = item.getName();
+                if (StringUtils.isBlank(title)) {
+                    try {
+                        title = I18nUtil.getMessage("org.dspace.workflow.WorkflowManager.untitled");
+                    } catch (MissingResourceException e) {
+                        title = "Untitled";
+                    }
                 }
+
+                email.addRecipient(ep.getEmail());
+                email.addArgument(title);
+                email.addArgument(coll.getName());
+                email.addArgument(handleService.getCanonicalForm(handle));
+
+                email.send();
             }
-
-            email.addRecipient(ep.getEmail());
-            email.addArgument(title);
-            email.addArgument(coll.getName());
-            email.addArgument(handleService.getCanonicalForm(handle));
-
-            email.send();
         } catch (MessagingException e) {
             log.warn(LogManager.getHeader(context, "notifyOfArchive",
-                                          "cannot email user; item_id=" + item.getID()
-                                              + ":  " + e.getMessage()));
+                    "cannot email user; item_id=" + item.getID()
+                    + ":  " + e.getMessage()));
         }
     }
 
@@ -866,6 +870,22 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
         return workspaceItem;
     }
 
+    @Override
+    public void deleteWorkflowByWorkflowItem(Context context, BasicWorkflowItem wi, EPerson e)
+        throws SQLException, AuthorizeException, IOException {
+        Item myitem = wi.getItem();
+        UUID itemID = myitem.getID();
+        Integer workflowID = wi.getID();
+        UUID collID = wi.getCollection().getID();
+        // stop workflow
+        taskListItemService.deleteByWorkflowItem(context, wi);
+        // Now remove the workflow object manually from the database
+        workflowItemService.deleteWrapper(context, wi);
+        // Now delete the item
+        itemService.delete(context, myitem);
+        log.info(LogManager.getHeader(context, "delete_workflow", String.format("workflow_item_id=%s " +
+                        "item_id=%s collection_id=%s eperson_id=%s", workflowID, itemID, collID, e.getID())));
+    }
 
     @Override
     public WorkspaceItem sendWorkflowItemBackSubmission(Context context, BasicWorkflowItem workflowItem,
@@ -910,8 +930,8 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
             + rejection_message + " on " + now + " (GMT) ";
 
         // Add to item as a DC field
-        itemService
-            .addMetadata(context, myitem, MetadataSchema.DC_SCHEMA, "description", "provenance", "en", provDescription);
+        itemService.addMetadata(context, myitem, MetadataSchemaEnum.DC.getName(),
+                         "description", "provenance", "en", provDescription);
         itemService.update(context, myitem);
 
         // convert into personal workspace
@@ -1041,31 +1061,36 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
 
     @Override
     public String getMyDSpaceLink() {
-        return configurationService.getProperty("dspace.url") + "/mydspace";
+        return configurationService.getProperty("dspace.ui.url") + "/mydspace";
     }
 
     protected void notifyOfReject(Context context, BasicWorkflowItem workflowItem, EPerson e,
                                   String reason) {
         try {
-            // Get the item title
-            String title = getItemTitle(workflowItem);
+            // Get submitter
+            EPerson ep = workflowItem.getSubmitter();
+            // send the notification only if the person was not deleted in the meantime
+            if (ep != null) {
+                // Get the item title
+                String title = getItemTitle(workflowItem);
 
-            // Get the collection
-            Collection coll = workflowItem.getCollection();
+                // Get the collection
+                Collection coll = workflowItem.getCollection();
 
-            // Get rejector's name
-            String rejector = getEPersonName(e);
-            Locale supportedLocale = I18nUtil.getEPersonLocale(e);
-            Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "submit_reject"));
+                // Get rejector's name
+                String rejector = getEPersonName(e);
+                Locale supportedLocale = I18nUtil.getEPersonLocale(e);
+                Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "submit_reject"));
 
-            email.addRecipient(workflowItem.getSubmitter().getEmail());
-            email.addArgument(title);
-            email.addArgument(coll.getName());
-            email.addArgument(rejector);
-            email.addArgument(reason);
-            email.addArgument(getMyDSpaceLink());
+                email.addRecipient(ep.getEmail());
+                email.addArgument(title);
+                email.addArgument(coll.getName());
+                email.addArgument(rejector);
+                email.addArgument(reason);
+                email.addArgument(getMyDSpaceLink());
 
-            email.send();
+                email.send();
+            }
         } catch (RuntimeException re) {
             // log this email error
             log.warn(LogManager.getHeader(context, "notify_of_reject",
@@ -1101,7 +1126,9 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
     @Override
     public String getSubmitterName(BasicWorkflowItem wi) throws SQLException {
         EPerson e = wi.getSubmitter();
-
+        if (e == null) {
+            return null;
+        }
         return getEPersonName(e);
     }
 
@@ -1135,8 +1162,8 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
         provDescription += installItemService.getBitstreamProvenanceMessage(context, item);
 
         // Add to item as a DC field
-        itemService
-            .addMetadata(context, item, MetadataSchema.DC_SCHEMA, "description", "provenance", "en", provDescription);
+        itemService.addMetadata(context, item, MetadataSchemaEnum.DC.getName(),
+                                "description", "provenance", "en", provDescription);
         itemService.update(context, item);
     }
 
@@ -1163,8 +1190,8 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
         provmessage += installItemService.getBitstreamProvenanceMessage(context, myitem);
 
         // Add message to the DC
-        itemService
-            .addMetadata(context, myitem, MetadataSchema.DC_SCHEMA, "description", "provenance", "en", provmessage);
+        itemService.addMetadata(context, myitem, MetadataSchemaEnum.DC.getName(),
+                                "description", "provenance", "en", provmessage);
         itemService.update(context, myitem);
     }
 
@@ -1196,24 +1223,30 @@ public class BasicWorkflowServiceImpl implements BasicWorkflowService {
     public Group getWorkflowRoleGroup(Context context, Collection collection, String roleName, Group roleGroup)
         throws SQLException, AuthorizeException {
         if ("WF_STEP1".equals(roleName)) {
-            roleGroup = collection.getWorkflowStep1();
+            roleGroup = collection.getWorkflowStep1(context);
             if (roleGroup == null) {
                 roleGroup = collectionService.createWorkflowGroup(context, collection, 1);
             }
 
         } else if ("WF_STEP2".equals(roleName)) {
-            roleGroup = collection.getWorkflowStep2();
+            roleGroup = collection.getWorkflowStep2(context);
             if (roleGroup == null) {
                 roleGroup = collectionService.createWorkflowGroup(context, collection, 2);
             }
         } else if ("WF_STEP3".equals(roleName)) {
-            roleGroup = collection.getWorkflowStep3();
+            roleGroup = collection.getWorkflowStep3(context);
             if (roleGroup == null) {
                 roleGroup = collectionService.createWorkflowGroup(context, collection, 3);
             }
 
         }
         return roleGroup;
+    }
+
+    @Override
+    public Group createWorkflowRoleGroup(Context context, Collection collection, String roleName)
+        throws AuthorizeException, SQLException {
+        return getWorkflowRoleGroup(context, collection, roleName, null);
     }
 
     @Override

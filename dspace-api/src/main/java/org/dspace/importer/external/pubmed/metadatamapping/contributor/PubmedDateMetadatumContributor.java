@@ -15,13 +15,13 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.dspace.content.DCDate;
 import org.dspace.importer.external.metadatamapping.MetadataFieldConfig;
 import org.dspace.importer.external.metadatamapping.MetadataFieldMapping;
 import org.dspace.importer.external.metadatamapping.MetadatumDTO;
 import org.dspace.importer.external.metadatamapping.contributor.MetadataContributor;
-import org.springframework.beans.factory.annotation.Required;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Pubmed specific implementation of {@link MetadataContributor}
@@ -30,7 +30,7 @@ import org.springframework.beans.factory.annotation.Required;
  * @author Philip Vissenaekens (philip at atmire dot com)
  */
 public class PubmedDateMetadatumContributor<T> implements MetadataContributor<T> {
-    Logger log = Logger.getLogger(PubmedDateMetadatumContributor.class);
+    Logger log = org.apache.logging.log4j.LogManager.getLogger(PubmedDateMetadatumContributor.class);
 
     private MetadataFieldMapping<T, MetadataContributor<T>> metadataFieldMapping;
 
@@ -43,7 +43,7 @@ public class PubmedDateMetadatumContributor<T> implements MetadataContributor<T>
         return dateFormatsToAttempt;
     }
 
-    @Required
+    @Autowired(required = true)
     public void setDateFormatsToAttempt(List<String> dateFormatsToAttempt) {
         this.dateFormatsToAttempt = dateFormatsToAttempt;
     }

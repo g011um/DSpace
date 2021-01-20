@@ -15,9 +15,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.annotation.Nullable;
 
 import org.apache.commons.collections4.MapUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.checker.service.ChecksumHistoryService;
 import org.dspace.content.Bitstream;
@@ -62,7 +63,7 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
     /**
      * log4j log
      */
-    private static Logger log = Logger.getLogger(BitstreamStorageServiceImpl.class);
+    private static Logger log = org.apache.logging.log4j.LogManager.getLogger(BitstreamStorageServiceImpl.class);
 
     @Autowired(required = true)
     protected BitstreamService bitstreamService;
@@ -326,15 +327,16 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
         }
     }
 
-    public Long getLastModified(Bitstream bitstream) {
-        Map wantedMetadata = new HashMap();
-        wantedMetadata.put("modified", null);
-        try {
-            wantedMetadata = stores.get(incoming).about(bitstream, wantedMetadata);
-        } catch (IOException e) {
-            log.error(e);
+    @Nullable
+    @Override
+    public Long getLastModified(Bitstream bitstream) throws IOException {
+        Map attrs = new HashMap();
+        attrs.put("modified", null);
+        attrs = stores.get(bitstream.getStoreNumber()).about(bitstream, attrs);
+        if (attrs == null || !attrs.containsKey("modified")) {
+            return null;
         }
-        return Long.valueOf(wantedMetadata.get("modified").toString());
+        return Long.valueOf(attrs.get("modified").toString());
     }
 
     /**

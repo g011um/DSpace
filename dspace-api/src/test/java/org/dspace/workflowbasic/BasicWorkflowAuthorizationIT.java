@@ -7,12 +7,14 @@
  */
 package org.dspace.workflowbasic;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.dspace.AbstractDSpaceTest;
 import org.dspace.AbstractIntegrationTest;
 import org.dspace.authorize.AuthorizeException;
@@ -47,6 +49,7 @@ import org.hamcrest.CoreMatchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -57,12 +60,13 @@ import org.junit.Test;
  * @author Pascal-Nicolas Becker
  * @author Terry Brady
  */
+@Ignore
 public class BasicWorkflowAuthorizationIT
     extends AbstractIntegrationTest {
     /**
      * log4j category
      */
-    private static final Logger log = Logger.getLogger(BasicWorkflowAuthorizationIT.class);
+    private static final Logger log = org.apache.logging.log4j.LogManager.getLogger(BasicWorkflowAuthorizationIT.class);
 
     protected CommunityService communityService = ContentServiceFactory.getInstance().getCommunityService();
     protected CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
@@ -206,7 +210,8 @@ public class BasicWorkflowAuthorizationIT
         } finally {
             context.restoreAuthSystemState();
         }
-        Assert.assertThat("testsetWorkflowGroupSetsPermission 0", collectionService.getWorkflowGroup(collection, step),
+        assertThat("testsetWorkflowGroupSetsPermission 0",
+                collectionService.getWorkflowGroup(context, collection, step),
                           CoreMatchers.equalTo(group));
         Assert.assertTrue(groupService.isDirectMember(group, member));
         Assert.assertTrue("testsetWorkflowGroupSetsPermission 1", authorizeService
@@ -227,10 +232,10 @@ public class BasicWorkflowAuthorizationIT
         } finally {
             context.restoreAuthSystemState();
         }
-        Assert
-            .assertThat("testsetWorkflowGroupRevokesPermission 0", collectionService.getWorkflowGroup(collection, step),
-                        CoreMatchers
-                            .equalTo(group));
+        assertThat("testsetWorkflowGroupRevokesPermission 0",
+                collectionService.getWorkflowGroup(context, collection, step),
+                CoreMatchers
+                    .equalTo(group));
         Assert.assertTrue("testsetWorkflowGroupRevokesPermission 1", authorizeService
             .authorizeActionBoolean(context, member, collection, Constants.WORKFLOW_STEP_1, true));
         try {
@@ -240,16 +245,16 @@ public class BasicWorkflowAuthorizationIT
         } finally {
             context.restoreAuthSystemState();
         }
-        Assert
-            .assertThat("testsetWorkflowGroupRevokesPermission 2", collectionService.getWorkflowGroup(collection, step),
-                        CoreMatchers
-                            .nullValue());
+        assertThat("testsetWorkflowGroupRevokesPermission 2",
+                collectionService.getWorkflowGroup(context, collection, step),
+                CoreMatchers
+                    .nullValue());
         Assert.assertFalse("testsetWorkflowGroupRevokesPermission 3", authorizeService
             .authorizeActionBoolean(context, member, collection, Constants.WORKFLOW_STEP_1, true));
     }
 
     /**
-     * Test that a member of a worfklow step group can claim a task and get the
+     * Test that a member of a workflow step group can claim a task and get the
      * appropriate policies.
      */
     @Test
@@ -266,7 +271,7 @@ public class BasicWorkflowAuthorizationIT
             Item item = wsi.getItem();
             Bundle bundle = bundleService.create(context, item, "ORIGINAL");
             File f = new File(AbstractDSpaceTest.testProps.get("test.bitstream").toString());
-            Bitstream bs = bitstreamService.create(context, bundle, new FileInputStream(f));
+            bitstreamService.create(context, bundle, new FileInputStream(f));
             bundleService.update(context, bundle);
             itemService.update(context, item);
             workspaceItemService.update(context, wsi);
@@ -284,8 +289,8 @@ public class BasicWorkflowAuthorizationIT
 
         int i = 0;
         // check item policies
-        for (int action : new int[] {Constants.READ, Constants.WRITE, Constants.ADD, Constants.REMOVE, Constants
-            .DELETE}) {
+        for (int action : new int[] {Constants.READ, Constants.WRITE, Constants.ADD, Constants.REMOVE,
+            Constants.DELETE}) {
             Assert.assertTrue("testReviewerPermissions 1-" + i++,
                               authorizeService.authorizeActionBoolean(context, member, item, action, false));
         }
@@ -318,7 +323,7 @@ public class BasicWorkflowAuthorizationIT
             Item item = wsi.getItem();
             Bundle bundle = bundleService.create(context, item, "ORIGINAL");
             File f = new File(AbstractDSpaceTest.testProps.get("test.bitstream").toString());
-            Bitstream bs = bitstreamService.create(context, bundle, new FileInputStream(f));
+            bitstreamService.create(context, bundle, new FileInputStream(f));
             bundleService.update(context, bundle);
             itemService.update(context, item);
             workspaceItemService.update(context, wsi);
@@ -360,7 +365,7 @@ public class BasicWorkflowAuthorizationIT
             item.setSubmitter(submitter);
             Bundle bundle = bundleService.create(context, item, "ORIGINAL");
             File f = new File(AbstractDSpaceTest.testProps.get("test.bitstream").toString());
-            Bitstream bs = bitstreamService.create(context, bundle, new FileInputStream(f));
+            bitstreamService.create(context, bundle, new FileInputStream(f));
             bundleService.update(context, bundle);
             itemService.update(context, item);
             workspaceItemService.update(context, wsi);

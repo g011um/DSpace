@@ -12,19 +12,19 @@ import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
 
-import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
-import org.dspace.content.MetadataSchema;
+import org.dspace.content.MetadataSchemaEnum;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.service.ItemService;
-import org.dspace.core.ConfigurationManager;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.LogManager;
 import org.dspace.handle.service.HandleService;
+import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.Version;
 import org.dspace.versioning.VersionHistory;
@@ -43,7 +43,8 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
     /**
      * log4j category
      */
-    private static Logger log = Logger.getLogger(VersionedHandleIdentifierProviderWithCanonicalHandles.class);
+    private static final Logger log =
+            org.apache.logging.log4j.LogManager.getLogger(VersionedHandleIdentifierProviderWithCanonicalHandles.class);
 
     /**
      * Prefix registered to no one
@@ -230,7 +231,7 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
                     modifyHandleMetadata(context, item, getCanonical(identifier));
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException | SQLException | AuthorizeException e) {
             log.error(
                 LogManager.getHeader(context, "Error while attempting to create handle", "Item id: " + dso.getID()), e);
             throw new RuntimeException("Error while attempting to create identifier for Item id: " + dso.getID(), e);
@@ -283,7 +284,7 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
     public void reserve(Context context, DSpaceObject dso, String identifier) {
         try {
             handleService.createHandle(context, dso, identifier);
-        } catch (Exception e) {
+        } catch (IllegalStateException | SQLException e) {
             log.error(
                 LogManager.getHeader(context, "Error while attempting to create handle", "Item id: " + dso.getID()), e);
             throw new RuntimeException("Error while attempting to create identifier for Item id: " + dso.getID());
@@ -317,7 +318,7 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
                 handleId = createNewIdentifier(context, dso, null);
             }
             return handleId;
-        } catch (Exception e) {
+        } catch (SQLException | AuthorizeException e) {
             log.error(
                 LogManager.getHeader(context, "Error while attempting to create handle", "Item id: " + dso.getID()), e);
             throw new RuntimeException("Error while attempting to create identifier for Item id: " + dso.getID());
@@ -329,7 +330,7 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
         // We can do nothing with this, return null
         try {
             return handleService.resolveToObject(context, identifier);
-        } catch (Exception e) {
+        } catch (IllegalStateException | SQLException e) {
             log.error(LogManager.getHeader(context, "Error while resolving handle to item", "handle: " + identifier),
                       e);
         }
@@ -377,7 +378,7 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
                     handleService.modifyHandleDSpaceObject(context, canonical, previous);
                 }
             }
-        } catch (Exception e) {
+        } catch (RuntimeException | SQLException e) {
             log.error(
                 LogManager.getHeader(context, "Error while attempting to register doi", "Item id: " + dso.getID()), e);
             throw new IdentifierException("Error while moving doi identifier", e);
@@ -403,7 +404,9 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
      * @return configured prefix or "123456789"
      */
     public static String getPrefix() {
-        String prefix = ConfigurationManager.getProperty("handle.prefix");
+        ConfigurationService configurationService
+                = DSpaceServicesFactory.getInstance().getConfigurationService();
+        String prefix = configurationService.getProperty("handle.prefix");
         if (null == prefix) {
             prefix = EXAMPLE_PREFIX; // XXX no good way to exit cleanly
             log.error("handle.prefix is not configured; using " + prefix);
@@ -492,8 +495,8 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
         // identifiers which are not from type handle and add the new handle.
         String handleref = handleService.getCanonicalForm(handle);
         List<MetadataValue> identifiers = itemService
-            .getMetadata(item, MetadataSchema.DC_SCHEMA, "identifier", "uri", Item.ANY);
-        itemService.clearMetadata(context, item, MetadataSchema.DC_SCHEMA, "identifier", "uri", Item.ANY);
+            .getMetadata(item, MetadataSchemaEnum.DC.getName(), "identifier", "uri", Item.ANY);
+        itemService.clearMetadata(context, item, MetadataSchemaEnum.DC.getName(), "identifier", "uri", Item.ANY);
         for (MetadataValue identifier : identifiers) {
             if (this.supports(identifier.getValue())) {
                 // ignore handles
@@ -508,7 +511,8 @@ public class VersionedHandleIdentifierProviderWithCanonicalHandles extends Ident
                                     identifier.getConfidence());
         }
         if (!StringUtils.isEmpty(handleref)) {
-            itemService.addMetadata(context, item, MetadataSchema.DC_SCHEMA, "identifier", "uri", null, handleref);
+            itemService.addMetadata(context, item, MetadataSchemaEnum.DC.getName(),
+                                    "identifier", "uri", null, handleref);
         }
         itemService.update(context, item);
     }

@@ -34,13 +34,14 @@ import org.dspace.usage.UsageWorkflowEvent;
 public interface SolrLoggerService {
 
     /**
-     * Old post method, use the new postview method instead !
+     * Old post method, use the new {@link #postView} method instead !
      *
      * @param dspaceObject the object used.
      * @param request      the current request context.
      * @param currentUser  the current session's user.
      * @deprecated
      */
+    @Deprecated
     public void post(DSpaceObject dspaceObject, HttpServletRequest request,
                      EPerson currentUser);
 
@@ -88,11 +89,12 @@ public interface SolrLoggerService {
      * @throws IOException         A general class of exceptions produced by failed or interrupted I/O operations.
      * @throws SolrServerException Exception from the Solr server to the solrj Java client.
      */
-    public void removeIndex(String query) throws IOException,
-        SolrServerException;
+    public void removeIndex(String query)
+        throws IOException, SolrServerException;
 
     public Map<String, List<String>> queryField(String query,
-                                                List oldFieldVals, String field);
+                                                List oldFieldVals, String field)
+        throws IOException;
 
     public void markRobotsByIP();
 
@@ -115,7 +117,8 @@ public interface SolrLoggerService {
                        List<String> fieldNames, List<List<Object>> fieldValuesList)
         throws SolrServerException, IOException;
 
-    public void query(String query, int max) throws SolrServerException;
+    public void query(String query, int max, int facetMinCount)
+        throws SolrServerException, IOException;
 
     /**
      * Query used to get values grouped by the given facet field.
@@ -128,12 +131,15 @@ public interface SolrLoggerService {
      * @param showTotal    a boolean determining whether the total amount should be given
      *                     back as the last element of the array
      * @param facetQueries list of facet queries
+     * @param facetMinCount Minimum count of results facet must have to return a result
      * @return an array containing our results
      * @throws SolrServerException Exception from the Solr server to the solrj Java client.
+     * @throws java.io.IOException passed through.
      */
     public ObjectCount[] queryFacetField(String query,
                                          String filterQuery, String facetField, int max, boolean showTotal,
-                                         List<String> facetQueries) throws SolrServerException;
+                                         List<String> facetQueries, int facetMinCount)
+        throws SolrServerException, IOException;
 
     /**
      * Query used to get values grouped by the date.
@@ -150,24 +156,28 @@ public interface SolrLoggerService {
      * @param showTotal   a boolean determining whether the total amount should be given
      *                    back as the last element of the array
      * @param context     The relevant DSpace Context.
+     * @param facetMinCount Minimum count of results facet must have to return a result
      * @return and array containing our results
      * @throws SolrServerException Exception from the Solr server to the solrj Java client.
+     * @throws java.io.IOException passed through.
      */
     public ObjectCount[] queryFacetDate(String query,
                                         String filterQuery, int max, String dateType, String dateStart,
-                                        String dateEnd, boolean showTotal, Context context) throws SolrServerException;
+                                        String dateEnd, boolean showTotal, Context context, int facetMinCount)
+        throws SolrServerException, IOException;
 
-    public Map<String, Integer> queryFacetQuery(String query,
-                                                String filterQuery, List<String> facetQueries)
-        throws SolrServerException;
+    public Map<String, Integer> queryFacetQuery(String query, String filterQuery, List<String> facetQueries,
+                                                int facetMinCount)
+        throws SolrServerException, IOException;
 
-    public ObjectCount queryTotal(String query, String filterQuery)
-        throws SolrServerException;
+    public ObjectCount queryTotal(String query, String filterQuery, int facetMinCount)
+        throws SolrServerException, IOException;
 
     public QueryResponse query(String query, String filterQuery,
                                String facetField, int rows, int max, String dateType, String dateStart,
-                               String dateEnd, List<String> facetQueries, String sort, boolean ascending)
-        throws SolrServerException;
+                               String dateEnd, List<String> facetQueries, String sort, boolean ascending,
+                               int facetMinCount)
+        throws SolrServerException, IOException;
 
     /**
      * Returns in a filterQuery string all the ip addresses that should be ignored
